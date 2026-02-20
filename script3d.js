@@ -15,14 +15,27 @@ const CONFIG = {
     POOL_SIZE: 20
 };
 
-let scene, camera, renderer, playerCar, loadedCarModel;
+let scene, camera, renderer, playerCar, loadedCarModel, loadedNpcModel;
 let buildings = [];
 let gameRunning = false, distanceTraveled = 0, highScore = 0;
 let speed = 0, targetSpeed = 0, lastTime = 0;
+let nearMissTimeout = null;
 let nitro = { available: 100, active: false, activatedAt: 0, recharging: false, cooldownStartedAt: 0 };
 let keys = { w: false, s: false, a: false, d: false, space: false };
 let cameraDistance = 1.0;
+let interiorCam = false;          // Toggle: false = chase cam, true = cockpit cam
+let gpTrianglePrev = false;       // Debounce for Triangle button
 let fpsFrames = 0, fpsTime = 0, fpsDisplay = 0;
+
+// --- Gamepad (PS5 DualSense) ---
+let gamepadIndex = null;          // Index of the connected gamepad
+let gpState = {                   // Polled every frame
+    accel: 0,                     // R2 trigger  (0.0 – 1.0)
+    brake: 0,                     // L2 trigger  (0.0 – 1.0)
+    steerX: 0,                    // Right Stick X  (−1.0 – 1.0)
+    nitro: false                  // X (Cross) button
+};
+const GP_DEADZONE = 0.12;         // Ignore stick noise below this
 
 // --- Performance: cached references ---
 let roadMesh = null;
@@ -36,7 +49,7 @@ let activeTraffic = []; // in-use cars
 let trafficMaterials = []; // pre-created materials per colour
 
 // --- Performance: cached DOM elements ---
-let domSpeedValue, domScoreValue, domGaugeArc, domNitroBar, domNitroStatus, domFpsCounter;
+let domSpeedValue, domScoreValue, domGaugeArc, domNitroBar, domNitroStatus, domFpsCounter, domNearMiss;
 
 // Gauge constants
 const GAUGE_R = 130;
@@ -95,11 +108,22 @@ function init() {
     domNitroBar = document.getElementById('nitro-bar');
     domNitroStatus = document.getElementById('nitro-status');
     domFpsCounter = document.getElementById('fps-counter');
+    domNearMiss = document.getElementById('near-miss-popup');
 
     window.addEventListener('resize', onWindowResize);
     window.addEventListener('wheel', onMouseWheel, { passive: true });
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
+
+    // Gamepad connection events
+    window.addEventListener('gamepadconnected', (e) => {
+        gamepadIndex = e.gamepad.index;
+        console.log(`🎮 Gamepad connected: ${e.gamepad.id}`);
+    });
+    window.addEventListener('gamepaddisconnected', (e) => {
+        if (e.gamepad.index === gamepadIndex) gamepadIndex = null;
+        console.log('🎮 Gamepad disconnected');
+    });
     document.getElementById('start-button').addEventListener('click', startGame);
     document.getElementById('restart-button').addEventListener('click', restartGame);
 
@@ -108,46 +132,60 @@ function init() {
     animate(0);
 }
 
-function loadModels() {
-    new GLTFLoader().load('car.glb', (gltf) => {
-        const carScene = gltf.scene;
-        const box = new THREE.Box3().setFromObject(carScene);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const s = 4.5 / Math.max(size.x, size.y, size.z);
-        carScene.scale.set(s, s, s);
-        carScene.updateMatrixWorld();
-        const box2 = new THREE.Box3().setFromObject(carScene);
-        carScene.position.y = -box2.min.y + 0.15;
-        // Rotate 180° so the car faces forward (away from camera)
-        carScene.rotation.y = Math.PI;
+function processGLTF(gltf, targetScale) {
+    const carScene = gltf.scene;
+    const box = new THREE.Box3().setFromObject(carScene);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const s = targetScale / Math.max(size.x, size.y, size.z);
+    carScene.scale.set(s, s, s);
+    carScene.updateMatrixWorld();
+    const box2 = new THREE.Box3().setFromObject(carScene);
+    carScene.position.y = -box2.min.y + 0.15;
+    // Rotate 180° so the car faces forward (away from camera)
+    carScene.rotation.y = Math.PI;
 
-        // Enhance GLTF materials: metallic look + env map reflections + shadows
-        carScene.traverse(n => {
-            if (n.isMesh) {
-                n.castShadow = true;
-                n.receiveShadow = true;
-                if (n.material) {
-                    n.material.metalness = Math.max(n.material.metalness || 0, 0.6);
-                    n.material.roughness = Math.min(n.material.roughness || 1, 0.35);
-                    n.material.envMapIntensity = 1.5;
-                    n.material.needsUpdate = true;
-                }
+    // Enhance GLTF materials: metallic look + env map reflections + shadows
+    carScene.traverse(n => {
+        if (n.isMesh) {
+            n.castShadow = true;
+            n.receiveShadow = true;
+            if (n.material) {
+                n.material.metalness = Math.max(n.material.metalness || 0, 0.6);
+                n.material.roughness = Math.min(n.material.roughness || 1, 0.35);
+                n.material.envMapIntensity = 1.5;
+                n.material.needsUpdate = true;
             }
-        });
+        }
+    });
 
-        loadedCarModel = new THREE.Group();
-        loadedCarModel.add(carScene);
+    const group = new THREE.Group();
+    group.add(carScene);
+    return group;
+}
 
-        // Pre-create shared materials for each traffic colour
-        preCreateTrafficMaterials();
+function loadModels() {
+    const loader = new GLTFLoader();
 
-        createPlayer();
-        initTrafficPool();
-        enableStartButton();
-    }, undefined, (err) => {
-        console.warn("GLB model failed, using box car.", err);
-        loadedCarModel = null;
+    // Load both models in parallel
+    Promise.all([
+        new Promise((resolve) => loader.load('car.glb', resolve, undefined, () => resolve(null))),
+        new Promise((resolve) => loader.load('npccar.glb', resolve, undefined, () => resolve(null)))
+    ]).then(([playerGltf, npcGltf]) => {
+        if (playerGltf) {
+            loadedCarModel = processGLTF(playerGltf, 4.5);
+        } else {
+            console.warn("Player car.glb failed, using procedural box.");
+            loadedCarModel = null;
+        }
+
+        if (npcGltf) {
+            loadedNpcModel = processGLTF(npcGltf, 4.5);
+        } else {
+            console.warn("Traffic npccar.glb failed, using fallback.");
+            loadedNpcModel = null;
+        }
+
         preCreateTrafficMaterials();
         createPlayer();
         initTrafficPool();
@@ -173,17 +211,14 @@ function enableStartButton() {
 }
 
 function createCarMesh(color, isPlayer) {
-    if (!loadedCarModel) return createProceduralCar(color);
-    const car = loadedCarModel.clone();
-    if (!isPlayer) {
-        // Use pre-created shared material instead of cloning per car
-        const matIndex = CONFIG.COLORS.TRAFFIC.indexOf(color);
-        const sharedMat = matIndex >= 0 ? trafficMaterials[matIndex] : trafficMaterials[0];
-        car.traverse(n => {
-            if (n.isMesh) { n.material = sharedMat; }
-        });
+    if (isPlayer) {
+        if (!loadedCarModel) return createProceduralCar(color);
+        return loadedCarModel.clone();
+    } else {
+        if (!loadedNpcModel) return createProceduralCar(color);
+        const car = loadedNpcModel.clone();
+        return car;
     }
-    return car;
 }
 
 function createPlayer() {
@@ -197,7 +232,7 @@ function initTrafficPool() {
         const colorIndex = i % CONFIG.COLORS.TRAFFIC.length;
         const car = createCarMesh(CONFIG.COLORS.TRAFFIC[colorIndex], false);
         car.visible = false;
-        car.userData = { speed: 0, colorIndex };
+        car.userData = { speed: 0, colorIndex, nearMissScored: false };
         scene.add(car);
         trafficPool.push(car);
     }
@@ -208,13 +243,10 @@ function spawnFromPool(lane) {
     const car = trafficPool.pop();
     const colorIndex = lane % CONFIG.COLORS.TRAFFIC.length;
 
-    // Update material to match lane colour
-    const sharedMat = trafficMaterials[colorIndex];
-    car.traverse(n => { if (n.isMesh) n.material = sharedMat; });
-
     car.position.set(-5 + lane * 5, 0, -100);
     car.rotation.set(0, 0, 0);
     car.userData.speed = 0.4 + Math.random() * 0.3;
+    car.userData.nearMissScored = false; // Reset near miss status
     car.visible = true;
     activeTraffic.push(car);
 }
@@ -349,6 +381,7 @@ function onKeyDown(e) {
     if (k === 'a' || k === 'arrowleft') keys.a = true;
     if (k === 'd' || k === 'arrowright') keys.d = true;
     if (k === ' ') keys.space = true;
+    if (k === 'c') interiorCam = !interiorCam;
 }
 function onKeyUp(e) {
     const k = e.key.toLowerCase();
@@ -368,6 +401,37 @@ function onMouseWheel(e) {
     cameraDistance = Math.max(0.5, Math.min(2.0, cameraDistance));
 }
 
+// --- Gamepad Polling (called every frame) ---
+function pollGamepad() {
+    if (gamepadIndex === null) return;
+    const gp = navigator.getGamepads()[gamepadIndex];
+    if (!gp) return;
+
+    // R2 = accelerate (analog float 0.0 – 1.0)
+    gpState.accel = gp.buttons[7].value;
+
+    // L2 = brake (analog float 0.0 – 1.0)
+    gpState.brake = gp.buttons[6].value;
+
+    // Left Stick X = steering (with deadzone)
+    const rawX = gp.axes[0];
+    gpState.steerX = Math.abs(rawX) > GP_DEADZONE ? rawX : 0;
+
+    // X (Cross) button = nitro (during gameplay) or start/restart (on menus)
+    gpState.nitro = gp.buttons[0].pressed;
+    if (gp.buttons[0].pressed && !gameRunning) {
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        if (startScreen && !startScreen.classList.contains('hidden')) startGame();
+        else if (gameOverScreen && !gameOverScreen.classList.contains('hidden')) restartGame();
+    }
+
+    // Triangle button = toggle interior camera (with debounce)
+    const triNow = gp.buttons[3].pressed;
+    if (triNow && !gpTrianglePrev) interiorCam = !interiorCam;
+    gpTrianglePrev = triNow;
+}
+
 function animate(time) {
     requestAnimationFrame(animate);
     if (!playerCar) return;
@@ -383,6 +447,7 @@ function animate(time) {
     lastTime = time;
 
     if (gameRunning) {
+        pollGamepad();
         updatePhysics(dt60);
         updateTraffic(dt60);
         updateBuildings(dt60);
@@ -399,38 +464,63 @@ function animate(time) {
 function updatePhysics(dt60) {
     let maxS = CONFIG.MAX_SPEED;
     if (nitro.active) maxS *= CONFIG.NITRO_MULTIPLIER;
-    // Gradual acceleration via lerp, scaled by delta time
-    if (keys.w) targetSpeed = maxS;
-    else if (keys.s) targetSpeed = 0;
+
+    // --- Merge inputs: keyboard OR gamepad (whichever is stronger) ---
+    const accelInput = Math.max(keys.w ? 1 : 0, gpState.accel);   // 0.0 – 1.0
+    const brakeInput = Math.max(keys.s ? 1 : 0, gpState.brake);   // 0.0 – 1.0
+    const steerLeft = (keys.a ? 1 : 0) + Math.max(0, -gpState.steerX);
+    const steerRight = (keys.d ? 1 : 0) + Math.max(0, gpState.steerX);
+    const steerInput = Math.min(1, steerRight) - Math.min(1, steerLeft); // −1 … +1
+
+    // Acceleration / braking (analog-aware)
+    if (accelInput > 0.05) targetSpeed = maxS * accelInput;
+    else if (brakeInput > 0.05) targetSpeed = 0;
     else targetSpeed = Math.max(0, targetSpeed - CONFIG.FRICTION * dt60);
-    const lerpRate = keys.s ? 0.04 : 0.02;
+
+    const lerpRate = brakeInput > 0.05 ? 0.04 : 0.02;
     speed += (targetSpeed - speed) * lerpRate * dt60;
     speed = Math.max(0, Math.min(speed, maxS));
     if (speed < 0.001) speed = 0;
 
-    if (speed > 0.05) {
-        if (keys.a) playerCar.position.x -= CONFIG.STEERING_SPEED * dt60;
-        if (keys.d) playerCar.position.x += CONFIG.STEERING_SPEED * dt60;
-        const tilt = keys.a ? CONFIG.TILT_AMOUNT : keys.d ? -CONFIG.TILT_AMOUNT : 0;
-        playerCar.rotation.z += (tilt - playerCar.rotation.z) * 0.1 * dt60;
+    // Steering (analog-aware)
+    if (speed > 0.05 && Math.abs(steerInput) > 0.01) {
+        playerCar.position.x += steerInput * CONFIG.STEERING_SPEED * dt60;
+        if (!interiorCam) {
+            const tilt = -steerInput * CONFIG.TILT_AMOUNT;
+            playerCar.rotation.z += (tilt - playerCar.rotation.z) * 0.1 * dt60;
+        } else {
+            playerCar.rotation.z += (0 - playerCar.rotation.z) * 0.2 * dt60;
+        }
+    } else if (speed > 0.05) {
+        playerCar.rotation.z += (0 - playerCar.rotation.z) * 0.1 * dt60;
     }
+
     const edge = CONFIG.ROAD_WIDTH / 2 - 1.5;
     playerCar.position.x = Math.max(-edge, Math.min(edge, playerCar.position.x));
     distanceTraveled += speed * dt60;
 }
 
 function updateCamera(dt60) {
-    const camY = 3 + 3 * cameraDistance;
-    const camZ = 5 + 5 * cameraDistance;
-    camera.position.x += (playerCar.position.x * 0.5 - camera.position.x) * 0.08 * dt60;
-    camera.position.y += (camY - camera.position.y) * 0.05 * dt60;
-    camera.position.z += (camZ - camera.position.z) * 0.05 * dt60;
-    camera.lookAt(playerCar.position.x * 0.3, 1, -15);
+    if (interiorCam) {
+        // Dash/Hood camera — looking straight ahead at the road
+        camera.position.x = playerCar.position.x;
+        camera.position.y = playerCar.position.y + 1.2;
+        camera.position.z = playerCar.position.z - 2.5; // Moved far forward to hide dashboard
+        camera.lookAt(playerCar.position.x, 0.5, -50);
+    } else {
+        // Exterior chase camera (original)
+        const camY = 3 + 3 * cameraDistance;
+        const camZ = 5 + 5 * cameraDistance;
+        camera.position.x += (playerCar.position.x * 0.5 - camera.position.x) * 0.08 * dt60;
+        camera.position.y += (camY - camera.position.y) * 0.05 * dt60;
+        camera.position.z += (camZ - camera.position.z) * 0.05 * dt60;
+        camera.lookAt(playerCar.position.x * 0.3, 1, -15);
+    }
 }
 
 function updateTraffic(dt60) {
     // Spawn using pool
-    if (Math.random() < 0.05 && activeTraffic.length < 15) {
+    if (Math.random() < 0.02 && activeTraffic.length < 8) {
         const lane = Math.floor(Math.random() * 3);
         spawnFromPool(lane);
     }
@@ -447,8 +537,14 @@ function updateTraffic(dt60) {
 function detectCollisions() {
     // Reuse pre-allocated Box3 objects instead of creating new ones each frame
     _playerBox.setFromObject(playerCar).expandByScalar(-0.2);
-    for (const c of activeTraffic) {
-        if (_playerBox.intersectsBox(_trafficBox.setFromObject(c).expandByScalar(-0.1))) {
+    for (const car of activeTraffic) { // Iterate activeTraffic, not trafficPool
+        if (!car.visible) continue;
+
+        // Use bounding boxes for collision detection
+        _trafficBox.setFromObject(car).expandByScalar(-0.1);
+
+        // Crash logic
+        if (_playerBox.intersectsBox(_trafficBox)) {
             gameRunning = false;
             document.getElementById('game-over-screen').classList.remove('hidden');
             document.getElementById('final-score').innerText = Math.floor(distanceTraveled);
@@ -457,7 +553,34 @@ function detectCollisions() {
                 localStorage.setItem('noHesi3dHighScore', highScore);
             }
             document.getElementById('game-over-high-score').innerText = Math.floor(highScore);
+            return; // Exit after first collision
         }
+
+        // Near Miss logic
+        // Z diff positive means player is ahead of traffic car. 
+        // We only check once it is just slightly behind (passedZ > 4.5 means rear bumper cleared)
+        const passedZ = playerCar.position.z - car.position.z;
+        if (passedZ > 4.5 && passedZ < 15 && !car.userData.nearMissScored) {
+            // Check if horizontal distance is very close but not crashed (between 1.8 and 3.0 units)
+            const dx = Math.abs(playerCar.position.x - car.position.x);
+            if (dx >= 1.8 && dx < 3.0) {
+                car.userData.nearMissScored = true;
+                scoreNearMiss();
+            }
+        }
+    }
+}
+
+function scoreNearMiss() {
+    distanceTraveled += 150;
+    if (domNearMiss) {
+        domNearMiss.classList.add('show');
+        domNearMiss.classList.remove('hidden');
+        if (nearMissTimeout) clearTimeout(nearMissTimeout);
+        nearMissTimeout = setTimeout(() => {
+            domNearMiss.classList.remove('show');
+            domNearMiss.classList.add('hidden');
+        }, 1000);
     }
 }
 
@@ -469,7 +592,7 @@ function updateNitro(time) {
         nitro.available = Math.min(100, ((time - nitro.cooldownStartedAt) / CONFIG.NITRO_COOLDOWN) * 100);
         if (nitro.available >= 100) nitro.recharging = false;
     }
-    if (keys.space && !nitro.active && !nitro.recharging && nitro.available >= 100) {
+    if ((keys.space || gpState.nitro) && !nitro.active && !nitro.recharging && nitro.available >= 100) {
         nitro.active = true; nitro.activatedAt = time;
     }
 }
