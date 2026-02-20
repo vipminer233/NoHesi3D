@@ -1,0 +1,406 @@
+/* ========================================
+   NO HESI 3D - Highway Racing Game Styles
+   ======================================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background: #0a0a0a;
+    font-family: 'Rajdhani', sans-serif;
+}
+
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #000;
+}
+
+/* ========================================
+   CIRCULAR HUD
+   ======================================== */
+#hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Speedometer Container */
+#speedo-container {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 280px;
+    height: 280px;
+}
+
+#speedo-title {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 900;
+    color: #00d4ff;
+    letter-spacing: 6px;
+    z-index: 2;
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.8), 0 0 40px rgba(0, 212, 255, 0.4);
+}
+
+#gauge-svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 15px rgba(0, 212, 255, 0.3));
+}
+
+#speed-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 2;
+}
+
+#speed-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 64px;
+    font-weight: 900;
+    color: #00d4ff;
+    line-height: 1;
+    text-shadow: 0 0 25px rgba(0, 212, 255, 0.8), 0 0 50px rgba(0, 212, 255, 0.3);
+}
+
+#speed-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: #7dd3fc;
+    letter-spacing: 4px;
+    margin-top: 4px;
+}
+
+/* Score Display */
+#score-display {
+    position: absolute;
+    top: 25px;
+    right: 25px;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.75), rgba(10, 10, 30, 0.85));
+    border: 2px solid rgba(0, 212, 255, 0.4);
+    border-radius: 12px;
+    padding: 12px 24px;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2), inset 0 0 15px rgba(0, 212, 255, 0.05);
+}
+
+#score-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #7dd3fc;
+    letter-spacing: 3px;
+}
+
+#score-display>#score-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 32px;
+    font-weight: 900;
+    color: #ffd700;
+    text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+    line-height: 1.2;
+}
+
+#score-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #7dd3fc;
+    letter-spacing: 2px;
+}
+
+#high-score-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffd700;
+    margin-top: 6px;
+    letter-spacing: 2px;
+    border-top: 1px solid rgba(0, 212, 255, 0.25);
+    padding-top: 6px;
+}
+
+/* Nitro Widget */
+#nitro-widget {
+    position: absolute;
+    bottom: 25px;
+    left: 25px;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.75), rgba(10, 10, 30, 0.85));
+    border: 2px solid rgba(0, 212, 255, 0.4);
+    border-radius: 12px;
+    padding: 12px 20px;
+    min-width: 160px;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2), inset 0 0 15px rgba(0, 212, 255, 0.05);
+}
+
+#nitro-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #7dd3fc;
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+}
+
+#nitro-bar-bg {
+    width: 100%;
+    height: 16px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 212, 255, 0.25);
+}
+
+#nitro-bar {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #00d4ff, #00ff88);
+    border-radius: 7px;
+    transition: width 0.1s ease-out;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+}
+
+#nitro-status {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #00ff88;
+    letter-spacing: 2px;
+    margin-top: 6px;
+    text-align: center;
+}
+
+#nitro-status.recharging {
+    color: #ff4444;
+}
+
+/* Controls Help */
+#controls-help {
+    position: absolute;
+    top: 25px;
+    left: 25px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    color: #7dd3fc;
+    letter-spacing: 1px;
+}
+
+#controls-help span {
+    display: inline-block;
+    background: rgba(0, 212, 255, 0.15);
+    border: 1px solid rgba(0, 212, 255, 0.4);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin: 0 2px;
+    font-family: 'Orbitron', monospace;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+/* ========================================
+   OVERLAY SCREENS
+   ======================================== */
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(10, 10, 30, 0.95), rgba(0, 0, 0, 0.98));
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    pointer-events: all;
+}
+
+.overlay.hidden {
+    display: none;
+}
+
+.overlay-content {
+    text-align: center;
+    padding: 50px;
+}
+
+.game-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 96px;
+    font-weight: 900;
+    color: #00d4ff;
+    letter-spacing: 15px;
+    margin-bottom: 10px;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.8), 0 0 60px rgba(0, 212, 255, 0.4), 0 4px 0 #004455;
+    animation: titleGlow 2s ease-in-out infinite;
+}
+
+@keyframes titleGlow {
+
+    0%,
+    100% {
+        text-shadow: 0 0 30px rgba(0, 212, 255, 0.8), 0 0 60px rgba(0, 212, 255, 0.4), 0 4px 0 #004455;
+    }
+
+    50% {
+        text-shadow: 0 0 50px rgba(0, 212, 255, 1), 0 0 100px rgba(0, 212, 255, 0.6), 0 4px 0 #004455;
+    }
+}
+
+.game-subtitle {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffd700;
+    letter-spacing: 20px;
+    margin-bottom: 50px;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.game-button {
+    font-family: 'Orbitron', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: #0a0a0a;
+    background: linear-gradient(180deg, #00ff88, #00d4ff);
+    border: none;
+    border-radius: 50px;
+    padding: 20px 60px;
+    cursor: pointer;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.5), 0 10px 40px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    pointer-events: all;
+}
+
+.game-button:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 0 50px rgba(0, 255, 136, 0.8), 0 15px 50px rgba(0, 0, 0, 0.4);
+}
+
+.game-button:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.game-button:disabled {
+    background: linear-gradient(180deg, #666, #444);
+    color: #999;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Game Over */
+.game-over-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 72px;
+    font-weight: 900;
+    color: #ff4444;
+    letter-spacing: 10px;
+    margin-bottom: 40px;
+    text-shadow: 0 0 30px rgba(255, 68, 68, 0.8), 0 0 60px rgba(255, 68, 68, 0.4), 0 4px 0 #661111;
+    animation: gameOverPulse 1s ease-in-out infinite;
+}
+
+@keyframes gameOverPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+#final-score-container {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.6), rgba(20, 20, 40, 0.8));
+    border: 3px solid #ffd700;
+    border-radius: 20px;
+    padding: 30px 60px;
+    margin-bottom: 40px;
+    display: inline-block;
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+}
+
+#final-score-container p {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    color: #7dd3fc;
+    margin: 5px 0;
+}
+
+#final-score {
+    font-family: 'Orbitron', monospace;
+    font-size: 72px;
+    font-weight: 900;
+    color: #ffd700;
+    text-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+    line-height: 1.2;
+}
+
+.high-score-text {
+    color: #ffd700 !important;
+    font-size: 24px !important;
+    margin-top: 15px !important;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .game-title {
+        font-size: 48px;
+        letter-spacing: 8px;
+    }
+
+    .game-subtitle {
+        font-size: 18px;
+        letter-spacing: 10px;
+    }
+
+    #speedo-container {
+        width: 220px;
+        height: 220px;
+        bottom: 10px;
+    }
+
+    #speed-value {
+        font-size: 42px;
+    }
+
+    #speedo-title {
+        font-size: 14px;
+    }
+
+    #controls-help {
+        display: none;
+    }
+}

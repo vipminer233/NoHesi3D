@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>No Hesi 3D - Highway Racing</title>
+    <link rel="stylesheet" href="style3d.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap"
+        rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js",
+                "three/examples/jsm/environments/RoomEnvironment.js": "https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Futuristic Circular HUD -->
+        <div id="hud">
+            <div id="fps-counter">FPS: 0</div>
+            <div id="speedo-container">
+                <div id="speedo-title">NO HESI</div>
+                <svg id="gauge-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="gaugeGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#00d4ff" />
+                            <stop offset="100%" stop-color="#00ff88" />
+                        </linearGradient>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="3" result="blur" />
+                            <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <circle cx="150" cy="150" r="145" fill="none" stroke="rgba(0,212,255,0.12)" stroke-width="1" />
+                    <circle id="gauge-track" cx="150" cy="150" r="130" fill="none" stroke="rgba(0,212,255,0.12)"
+                        stroke-width="8" stroke-linecap="round" />
+                    <circle id="gauge-arc" cx="150" cy="150" r="130" fill="none" stroke="url(#gaugeGrad)"
+                        stroke-width="8" stroke-linecap="round" filter="url(#glow)" />
+                    <circle id="orange-ring" cx="150" cy="150" r="112" fill="none" stroke="#ff8c00" stroke-width="3"
+                        stroke-linecap="round" opacity="0.4" />
+                    <g id="tick-marks"></g>
+                    <g id="tick-labels"></g>
+                </svg>
+                <div id="speed-display">
+                    <div id="speed-value">0</div>
+                    <div id="speed-unit">MPH</div>
+                </div>
+            </div>
+
+            <div id="score-display">
+                <div id="score-label">DISTANCE</div>
+                <div id="score-value">0</div>
+                <div id="score-unit">m</div>
+                <div id="high-score-label">BEST: <span id="high-score-value">0</span></div>
+            </div>
+
+            <div id="nitro-widget">
+                <div id="nitro-label">NITRO</div>
+                <div id="nitro-bar-bg">
+                    <div id="nitro-bar"></div>
+                </div>
+                <div id="nitro-status">READY</div>
+            </div>
+
+            <div id="controls-help">
+                <span>W</span> Gas &nbsp; <span>S</span> Brake &nbsp; <span>A/D</span> Steer &nbsp;
+                <span>SPACE</span> Nitro &nbsp; <span>SCROLL</span> Zoom
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay">
+            <div class="overlay-content">
+                <h1 class="game-title">NO HESI 3D</h1>
+                <p class="game-subtitle">HIGHWAY RACING</p>
+                <button id="start-button" class="game-button" disabled>LOADING...</button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="overlay hidden">
+            <div class="overlay-content">
+                <h1 class="game-over-title">GAME OVER</h1>
+                <div id="final-score-container">
+                    <p>Distance Traveled</p>
+                    <div id="final-score">0</div>
+                    <p>meters</p>
+                    <p class="high-score-text">Best: <span id="game-over-high-score">0</span></p>
+                </div>
+                <button id="restart-button" class="game-button">RESTART</button>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="script3d.js"></script>
+</body>
+
+</html>
